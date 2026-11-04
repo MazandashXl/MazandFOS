@@ -1,2 +1,2 @@
-# Runtime dependencies: Python 3.8+ standard library only.
-# No pip install is needed to launch from source.
+# Runtime dependencies for the release build
+openpyxl>=3.1.0

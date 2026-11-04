@@ -524,9 +524,11 @@ class SortingApp(tk.Tk):
         row=tk.Frame(panel,bg="#ffffff");row.pack(fill="x")
         for ent,label in [("parties","اشخاص"),("shipments","محموله‌ها"),("weighings","باسکول"),("invoices","فاکتورها")]:ttk.Button(row,text="خروجی "+label,command=lambda e=ent:self.export_csv(e)).pack(side="right",padx=4)
         panel2=tk.Frame(self.content,bg="#ffffff",padx=22,pady=22,highlightthickness=1,highlightbackground="#e3e9ef");panel2.pack(fill="x",pady=(0,16))
-        tk.Label(panel2,text="ورود اطلاعات اشخاص از CSV",bg="#ffffff",fg="#14243d",font=("Tahoma",12,"bold"),anchor="e").pack(fill="x",pady=(0,8))
-        tk.Label(panel2,text="ستون‌های قابل شناسایی: display_name / نام / name ، phone / تلفن / موبایل ، national_id / کد ملی. ردیف‌های متعارض برای بررسی دستی علامت می‌خورند.",bg="#ffffff",fg="#64748b",font=("Tahoma",9),anchor="e",justify="right",wraplength=850).pack(fill="x",pady=(0,10))
-        ttk.Button(panel2,text="انتخاب CSV و پیش‌نمایش",style="Primary.TButton",command=self.import_parties_csv).pack(anchor="e")
+        tk.Label(panel2,text="ورود اطلاعات اشخاص از CSV یا Excel",bg="#ffffff",fg="#14243d",font=("Tahoma",12,"bold"),anchor="e").pack(fill="x",pady=(0,8))
+        tk.Label(panel2,text="ستون‌های قابل شناسایی: display_name / نام / name ، phone / تلفن / موبایل ، national_id / کد ملی. برای فایل Excel، سربرگ ستون‌ها باید با نام‌های بالا یا مشابه همخوانی داشته باشند. ردیف‌های متعارض برای بررسی دستی علامت می‌خورند.",bg="#ffffff",fg="#64748b",font=("Tahoma",9),anchor="e",justify="right",wraplength=850).pack(fill="x",pady=(0,10))
+        btns=tk.Frame(panel2,bg="#ffffff");btns.pack(anchor="e")
+        ttk.Button(btns,text="انتخاب CSV و پیش‌نمایش",style="Primary.TButton",command=self.import_parties_csv).pack(side="right",padx=6)
+        ttk.Button(btns,text="انتخاب Excel و پیش‌نمایش",command=self.import_excel_file).pack(side="right")
         panel3=tk.Frame(self.content,bg="#ffffff",padx=22,pady=22,highlightthickness=1,highlightbackground="#e3e9ef");panel3.pack(fill="x")
         tk.Label(panel3,text="پشتیبان‌گیری",bg="#ffffff",fg="#14243d",font=("Tahoma",12,"bold"),anchor="e").pack(fill="x",pady=(0,8))
         tk.Label(panel3,text="فایل SQLite شامل اطلاعات عملیاتی و سوابق تغییرات است. پیش از جایگزینی یا انتقال پایگاه داده، برنامه را ببندید.",bg="#ffffff",fg="#64748b",font=("Tahoma",9),anchor="e",justify="right").pack(fill="x",pady=(0,10))
@@ -541,6 +543,16 @@ class SortingApp(tk.Tk):
                 writer=csv.writer(f);writer.writerows(rows)
             self.status_var.set("خروجی ذخیره شد: "+os.path.basename(path));messagebox.showinfo("خروجی موفق","%d ردیف در فایل ذخیره شد."%(len(rows)-1),parent=self)
         except Exception as exc:messagebox.showerror("خروجی ناموفق",str(exc),parent=self)
+
+    def import_excel_file(self):
+        path=filedialog.askopenfilename(title="انتخاب فایل Excel اشخاص",filetypes=[("فایل‌های Excel","*.xlsx;*.xlsm;*.xls"),("همه فایل‌ها","*.*")])
+        if not path:
+            return
+        try:
+            preview=self.db.import_excel_preview(path, entity="parties")
+            self._show_import_preview(path, preview)
+        except Exception as exc:
+            messagebox.showerror("خواندن فایل Excel ناموفق", str(exc), parent=self)
 
     def import_parties_csv(self):
         path=filedialog.askopenfilename(title="انتخاب فایل اشخاص",filetypes=[("CSV","*.csv"),("همه فایل‌ها","*.*")])

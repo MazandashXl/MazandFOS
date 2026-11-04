@@ -2,7 +2,14 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
+
 from database import Database
+
+try:
+    from openpyxl import Workbook
+except Exception:  # pragma: no cover
+    Workbook = None
 
 class DatabaseTests(unittest.TestCase):
     def setUp(self):
@@ -58,6 +65,26 @@ class DatabaseTests(unittest.TestCase):
         ]
         preview=self.db.import_parties_preview(rows)
         self.assertEqual([row["action"] for row in preview],["insert","review","review"])
+    def test_xlsx_import_preview_and_batch_insert(self):
+        if Workbook is None:
+            self.skipTest("openpyxl not installed")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        ws.append(["display_name", "phone", "national_id", "roles", "address"])
+        ws.append(["علی رضایی", "09120000001", "1001", "مالک کالا", "تهران"])
+        ws.append(["حسین محمدی", "09120000002", "1002", "مالک کالا", "اصفهان"])
+        path = Path(self.tmp.name) / "people.xlsx"
+        wb.save(path)
+
+        preview = self.db.import_excel_preview(str(path), entity="parties")
+        self.assertEqual(preview[0]["action"], "insert")
+        self.assertEqual(len(preview), 2)
+
+        inserted = self.db.import_excel_records(str(path), entity="parties", accept_rows=[0, 1])
+        self.assertEqual(inserted, 2)
+        self.assertEqual(len(self.db.list_parties()), 2)
+
     def test_csv_export_headers(self):
         self.party()
         rows=self.db.export_rows("parties")

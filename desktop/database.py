@@ -9,6 +9,11 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
+try:
+    from openpyxl import load_workbook
+except Exception:  # pragma: no cover - installed as runtime dependency in release builds
+    load_workbook = None
+
 SCHEMA_VERSION = 1
 
 
@@ -297,6 +302,97 @@ class Database:
                 seen_national_ids.add(nid)
             result.append({"row": index, "display_name": name, "phone": phone, "national_id": nid, "action": action, "reason": reason, "source": row})
         return result
+
+    def import_excel_preview(self, file_path, entity="parties"):
+        if entity != "parties":
+            raise ValueError("در این نسخه فقط واردسازی فایل اکسل اشخاص پشتیبانی می‌شود.")
+        if load_workbook is None:
+            raise RuntimeError("برای ورود فایل اکسل باید بسته openpyxl نصب شود. دستور: pip install openpyxl")
+        if not os.path.exists(file_path):
+            raise FileNotFoundError("فایل Excel پیدا نشد: %s" % file_path)
+
+        workbook = load_workbook(file_path, read_only=True, data_only=True)
+        try:
+            worksheet = workbook.active
+            rows = list(worksheet.iter_rows(values_only=True))
+        finally:
+            workbook.close()
+        if not rows:
+            return []
+
+        headers = []
+        for value in rows[0]:
+            headers.append(str(value or "").strip() if value is not None else "")
+
+        normalized = []
+        for row in rows[1:]:
+            mapping = {}
+            for idx, header in enumerate(headers):
+                if idx >= len(row):
+                    value = ""
+                else:
+                    value = row[idx]
+                key = str(header or "").strip()
+                mapping[key] = "" if value is None else str(value).strip()
+            if not any((v or "").strip() for v in mapping.values()):
+                continue
+            normalized.append({
+                "display_name": mapping.get("display_name") or mapping.get("نام") or mapping.get("name") or "",
+                "phone": mapping.get("phone") or mapping.get("تلفن") or mapping.get("موبایل") or "",
+                "national_id": mapping.get("national_id") or mapping.get("کد ملی") or mapping.get("کدملی") or "",
+                "roles": mapping.get("roles") or mapping.get("نقش") or "مالک کالا",
+                "address": mapping.get("address") or mapping.get("نشانی") or mapping.get("آدرس") or "",
+                "source": mapping,
+            })
+
+        preview = self.import_parties_preview([
+            {
+                "display_name": item["display_name"],
+                "phone": item["phone"],
+                "national_id": item["national_id"],
+                "address": item["address"],
+                "roles": item["roles"],
+            }
+            for item in normalized
+        ])
+        for index, record in enumerate(preview):
+            record["row"] = index + 1
+            record["source"] = normalized[index].get("source", {})
+            record["source"].update({
+                "display_name": record["display_name"],
+                "phone": record["phone"],
+                "national_id": record["national_id"],
+                "roles": normalized[index].get("roles", "مالک کالا"),
+                "address": normalized[index].get("address", ""),
+            })
+        return preview
+
+    def import_excel_records(self, file_path, entity="parties", accept_rows=None, actor="درون‌ریزی Excel"):
+        preview = self.import_excel_preview(file_path, entity=entity)
+        if accept_rows is None:
+            selected = [idx for idx, row in enumerate(preview) if row.get("action") == "insert"]
+        else:
+            selected = []
+            for value in accept_rows:
+                idx = int(value)
+                if 0 <= idx < len(preview):
+                    selected.append(idx)
+        inserted = 0
+        for idx in sorted(set(selected)):
+            item = preview[idx]
+            if item.get("action") != "insert":
+                continue
+            self.import_new_party({
+                "display_name": item.get("display_name", ""),
+                "phone": item.get("phone", ""),
+                "national_id": item.get("national_id", ""),
+                "address": (item.get("source") or {}).get("address", "") or (item.get("source") or {}).get("نشانی", "") or "",
+                "roles": (item.get("source") or {}).get("roles", "مالک کالا") or "مالک کالا",
+                "action": "insert",
+                "source": item.get("source", {}),
+            }, actor=actor)
+            inserted += 1
+        return inserted
 
     def import_new_party(self, item, actor="درون‌ریزی CSV"):
         if item.get("action") != "insert":
